@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build artifacts
+frontend/build/
+
+# Environment files (use .env.example as template)
+.env
+*/.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
