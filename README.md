@@ -67,7 +67,7 @@ medledger-blockchain/
 
 ```bash
 cd backend
-cp .env.example .env        # Edit with your MongoDB URI and JWT secret
+cp .env.example .env        # Edit with your MongoDB URI, JWT secret, and admin credentials
 npm install
 npm run dev                 # Starts with nodemon on port 5000
 ```
@@ -83,10 +83,11 @@ npm start                   # Starts React dev server on port 3000
 
 ### Default Admin Account
 
-On first startup, the backend seeds a default admin account:
+On first startup, the backend seeds a default admin account only when
+`ADMIN_DEFAULT_PASSWORD` is configured:
 
-- **Email:** `admin@medledger.com`
-- **Password:** Value of `ADMIN_DEFAULT_PASSWORD` from `.env` (default: `Admin@123`)
+- **Email:** Value of `ADMIN_DEFAULT_EMAIL` from `.env` (default: `admin@medledger.com`)
+- **Password:** Value of `ADMIN_DEFAULT_PASSWORD` from `.env`
 
 ## API Endpoints
 
@@ -139,6 +140,8 @@ PORT=5000
 MONGODB_URI=mongodb://localhost:27017/medledger
 JWT_SECRET=your_jwt_secret_here
 JWT_EXPIRES_IN=7d
+CORS_ORIGINS=http://localhost:3000
+ADMIN_DEFAULT_EMAIL=admin@medledger.com
 ADMIN_DEFAULT_PASSWORD=your_admin_password_here
 ```
 

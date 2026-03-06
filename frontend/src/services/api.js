@@ -1,9 +1,18 @@
 import axios from 'axios';
 
 // Create a configured axios instance pointing to the backend API
+// baseURL is empty so requests are relative to the dev server, which proxies
+// them to the backend (see "proxy" in package.json). Set REACT_APP_API_URL
+// to override (e.g. a deployed backend URL).
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
+  baseURL: process.env.REACT_APP_API_URL || '',
 });
+
+const clearPersistedAuth = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  window.dispatchEvent(new Event('medledger:auth-cleared'));
+};
 
 // Attach JWT token from localStorage to every outgoing request
 api.interceptors.request.use((config) => {
@@ -13,6 +22,40 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const method = (error.config?.method || 'request').toUpperCase();
+    const url = error.config?.url || '(unknown)';
+    const requestUrl = error.config?.url || '';
+    const isPublicAuthRequest =
+      requestUrl.includes('/api/auth/login') || requestUrl.includes('/api/auth/register');
+
+    if (!error.response) {
+      // Network-level failure — server unreachable, timeout, CORS preflight blocked, etc.
+      console.error(
+        `[MedLedger] Network error — ${method} ${url}`,
+        `code: ${error.code || 'none'}`,
+        error.message,
+      );
+    } else {
+      // HTTP error response received from the server
+      const responseBody = error.response.data;
+      console.error(
+        `[MedLedger] API error — ${method} ${url} → ${status}`,
+        responseBody,
+      );
+    }
+
+    if (!isPublicAuthRequest && status === 401 && localStorage.getItem('token')) {
+      clearPersistedAuth();
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // --- Auth ---
 export const loginUser = (data) => api.post('/api/auth/login', data);
@@ -26,6 +69,7 @@ export const deactivateUser = (id) => api.patch(`/api/admin/users/${id}/deactiva
 export const getAuditLogs = () => api.get('/api/admin/audit-logs');
 
 // --- Doctor ---
+export const searchPatients = (q) => api.get('/api/doctor/patients/search', { params: { q } });
 export const getMyPatients = () => api.get('/api/doctor/patients');
 export const requestAccess = (patientId) => api.post(`/api/doctor/access-requests/${patientId}`);
 export const getAccessRequests = () => api.get('/api/doctor/access-requests');

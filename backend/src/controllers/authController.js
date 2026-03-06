@@ -1,5 +1,4 @@
 // Auth controller — handles registration and login
-const { validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
@@ -9,13 +8,9 @@ const AuditLog = require('../models/AuditLog');
  * Patient self-registration. isApproved defaults to false until admin approves.
  */
 const register = async (req, res) => {
-  // Validate request body
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { name, email, password } = req.body;
+  const name = req.body.name?.trim();
+  const email = req.body.email?.trim().toLowerCase();
+  const { password } = req.body;
 
   try {
     const existingUser = await User.findOne({ email });
@@ -36,7 +31,11 @@ const register = async (req, res) => {
       user: { id: user._id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
+    console.error('Registration error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -45,12 +44,8 @@ const register = async (req, res) => {
  * Login for all roles. Returns JWT containing id, role, and isApproved.
  */
 const login = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { email, password } = req.body;
+  const email = req.body.email?.trim().toLowerCase();
+  const { password } = req.body;
 
   try {
     const user = await User.findOne({ email });
@@ -92,7 +87,8 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Login error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 

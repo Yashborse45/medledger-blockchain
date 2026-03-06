@@ -5,6 +5,39 @@ const AuditLog = require('../models/AuditLog');
 const User = require('../models/User');
 
 /**
+ * GET /api/doctor/patients/search?q=
+ * Search approved, active patients by name or email (partial, case-insensitive).
+ * Returns only id, name, and email — no sensitive record data.
+ * Requires at least 2 characters to prevent dumping the full patient list.
+ */
+const searchPatients = async (req, res) => {
+  const q = req.query.q?.trim();
+
+  if (!q || q.length < 2) {
+    return res.status(400).json({ message: 'Search query must be at least 2 characters' });
+  }
+
+  try {
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    const patients = await User.find({
+      role: 'patient',
+      isApproved: true,
+      isActive: true,
+      $or: [{ name: regex }, { email: regex }],
+    })
+      .select('_id name email')
+      .limit(20)
+      .lean();
+
+    return res.status(200).json({ patients });
+  } catch (error) {
+    console.error('Failed to search patients:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
  * GET /api/doctor/patients
  * Returns patients where this doctor has been granted access.
  */
@@ -15,10 +48,13 @@ const getGrantedPatients = async (req, res) => {
       status: 'granted',
     }).populate('patientId', 'name email');
 
-    const patients = permissions.map((p) => p.patientId);
+    const patients = permissions
+      .map((permission) => permission.patientId)
+      .filter(Boolean);
     return res.status(200).json({ patients });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch granted patients:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -31,19 +67,42 @@ const requestAccess = async (req, res) => {
 
   try {
     // Verify the target is a valid patient
-    const patient = await User.findOne({ _id: patientId, role: 'patient' });
+    const patient = await User.findOne({ _id: patientId, role: 'patient' }).select(
+      'name email isActive isApproved'
+    );
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
+    if (!patient.isActive) {
+      return res.status(400).json({ message: 'Cannot request access to an inactive patient account' });
+    }
+    if (!patient.isApproved) {
+      return res.status(400).json({ message: 'Cannot request access until patient is approved' });
+    }
 
-    // Prevent duplicate pending/granted requests
+    // Prevent duplicate pending/granted requests and allow re-request after revoke
     const existing = await AccessPermission.findOne({
       doctorId: req.user._id,
       patientId,
-      status: { $in: ['pending', 'granted'] },
     });
     if (existing) {
-      return res.status(409).json({ message: 'Access request already exists' });
+      if (existing.status === 'pending' || existing.status === 'granted') {
+        return res.status(409).json({ message: 'Access request already exists' });
+      }
+
+      existing.status = 'pending';
+      existing.requestedAt = new Date();
+      existing.respondedAt = undefined;
+      await existing.save();
+
+      await AuditLog.create({
+        action: 'ACCESS_REQUESTED',
+        performedBy: req.user._id,
+        targetUser: patientId,
+        details: { permissionId: existing._id, repeated: true },
+      });
+
+      return res.status(200).json({ message: 'Access request resubmitted', permission: existing });
     }
 
     const permission = await AccessPermission.create({
@@ -61,7 +120,11 @@ const requestAccess = async (req, res) => {
 
     return res.status(201).json({ message: 'Access request submitted', permission });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'Access request already exists' });
+    }
+    console.error('Failed to request access:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -77,7 +140,8 @@ const getMyAccessRequests = async (req, res) => {
 
     return res.status(200).json({ requests });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch access requests:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -112,8 +176,9 @@ const getPatientRecords = async (req, res) => {
 
     return res.status(200).json({ records });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch patient records:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-module.exports = { getGrantedPatients, requestAccess, getMyAccessRequests, getPatientRecords };
+module.exports = { searchPatients, getGrantedPatients, requestAccess, getMyAccessRequests, getPatientRecords };

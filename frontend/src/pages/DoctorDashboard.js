@@ -1,32 +1,43 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import {
-  getMyPatients,
-  requestAccess,
   getAccessRequests,
+  getMyPatients,
   getPatientRecords,
+  requestAccess,
+  searchPatients,
 } from '../services/api';
+import { extractApiError } from '../utils/apiError';
 
 /**
  * DoctorDashboard shows:
  * 1. Patients with granted access and their records (expandable)
- * 2. Access request form (by patient ID)
+ * 2. Patient search + access request flow (search by name/email, then click Request)
  * 3. All access requests with their current status
  */
 const DoctorDashboard = () => {
   const [patients, setPatients] = useState([]);
   const [accessRequests, setAccessRequests] = useState([]);
-  const [patientId, setPatientId] = useState('');
-  const [requestMsg, setRequestMsg] = useState('');
-  const [requestError, setRequestError] = useState('');
-  const [requestLoading, setRequestLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Patient search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searched, setSearched] = useState(false);
+
+  // Per-patient request state: { [patientId]: { loading, msg, error } }
+  const [requestState, setRequestState] = useState({});
 
   // State for expanded patient record panel
   const [expandedPatient, setExpandedPatient] = useState(null);
   const [patientRecords, setPatientRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState('');
+
+  const searchInputRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -36,7 +47,7 @@ const DoctorDashboard = () => {
       setPatients(pRes.data.patients || pRes.data);
       setAccessRequests(rRes.data.requests || rRes.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load data.');
+      setError(extractApiError(err, 'Failed to load data.'));
     } finally {
       setLoading(false);
     }
@@ -44,20 +55,42 @@ const DoctorDashboard = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleRequestAccess = async (e) => {
+  const handleSearch = async (e) => {
     e.preventDefault();
-    setRequestMsg('');
-    setRequestError('');
-    setRequestLoading(true);
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchError('Enter at least 2 characters to search.');
+      return;
+    }
+    setSearchError('');
+    setSearchResults([]);
+    setSearchLoading(true);
+    setSearched(true);
     try {
-      await requestAccess(patientId.trim());
-      setRequestMsg('Access request sent successfully.');
-      setPatientId('');
+      const res = await searchPatients(q);
+      setSearchResults(res.data.patients || []);
+    } catch (err) {
+      setSearchError(extractApiError(err, 'Search failed.'));
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleRequestAccess = async (patient) => {
+    const id = patient._id;
+    setRequestState((prev) => ({ ...prev, [id]: { loading: true, msg: '', error: '' } }));
+    try {
+      const res = await requestAccess(id);
+      setRequestState((prev) => ({
+        ...prev,
+        [id]: { loading: false, msg: res.data?.message || 'Request sent.', error: '' },
+      }));
       fetchData();
     } catch (err) {
-      setRequestError(err.response?.data?.message || 'Failed to send request.');
-    } finally {
-      setRequestLoading(false);
+      setRequestState((prev) => ({
+        ...prev,
+        [id]: { loading: false, msg: '', error: extractApiError(err, 'Failed to send request.') },
+      }));
     }
   };
 
@@ -65,15 +98,18 @@ const DoctorDashboard = () => {
     if (expandedPatient === (patient._id || patient.id)) {
       setExpandedPatient(null);
       setPatientRecords([]);
+      setRecordsError('');
       return;
     }
     setExpandedPatient(patient._id || patient.id);
+    setRecordsError('');
     setRecordsLoading(true);
     try {
       const res = await getPatientRecords(patient._id || patient.id);
       setPatientRecords(res.data.records || res.data);
     } catch (err) {
       setPatientRecords([]);
+      setRecordsError(extractApiError(err, 'Failed to load patient records.'));
     } finally {
       setRecordsLoading(false);
     }
@@ -83,6 +119,12 @@ const DoctorDashboard = () => {
     if (status === 'granted') return 'badge badge-success';
     if (status === 'revoked') return 'badge badge-danger';
     return 'badge badge-warning';
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
   };
 
   return (
@@ -97,24 +139,56 @@ const DoctorDashboard = () => {
         {/* ── Request Access Section ── */}
         <div className="card">
           <div className="card-header"><h2>Request Patient Access</h2></div>
-          {requestError && <div className="alert alert-error">{requestError}</div>}
-          {requestMsg && <div className="alert alert-success">{requestMsg}</div>}
-          <form onSubmit={handleRequestAccess} className="inline-form inline-form-row">
+          <form onSubmit={handleSearch} className="inline-form inline-form-row">
             <div className="form-group flex-grow">
-              <label htmlFor="patientId">Patient ID</label>
+              <label htmlFor="patientSearch">Search by patient name or email</label>
               <input
-                id="patientId"
+                id="patientSearch"
+                ref={searchInputRef}
                 className="form-input"
-                placeholder="Enter patient ID"
-                value={patientId}
-                onChange={(e) => setPatientId(e.target.value)}
-                required
+                placeholder="e.g. John or john@example.com"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setSearched(false); setSearchResults([]); setSearchError(''); }}
+                autoComplete="off"
               />
             </div>
-            <button type="submit" className="btn btn-primary" disabled={requestLoading}>
-              {requestLoading ? 'Sending…' : 'Send Request'}
+            <button type="submit" className="btn btn-primary" disabled={searchLoading}>
+              {searchLoading ? 'Searching…' : 'Search'}
             </button>
           </form>
+
+          {searchError && <div className="alert alert-error">{searchError}</div>}
+
+          {searched && !searchLoading && (
+            <div className="search-results">
+              {searchResults.length === 0 ? (
+                <p className="empty-msg">No approved patients found matching "{searchQuery}".</p>
+              ) : (
+                searchResults.map((patient) => {
+                  const rs = requestState[patient._id] || {};
+                  return (
+                    <div key={patient._id} className="search-result-item">
+                      <div className="patient-info">
+                        <strong>{patient.name}</strong>
+                        <span className="text-muted">{patient.email}</span>
+                      </div>
+                      <div className="search-result-actions">
+                        {rs.msg && <span className="text-success text-sm">{rs.msg}</span>}
+                        {rs.error && <span className="text-danger text-sm">{rs.error}</span>}
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleRequestAccess(patient)}
+                          disabled={rs.loading || !!rs.msg}
+                        >
+                          {rs.loading ? 'Sending…' : rs.msg ? 'Requested' : 'Request Access'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── My Patients Section ── */}
@@ -141,6 +215,8 @@ const DoctorDashboard = () => {
                   <div className="records-panel">
                     {recordsLoading ? (
                       <div className="loading">Loading records…</div>
+                    ) : recordsError ? (
+                      <p className="empty-msg">{recordsError}</p>
                     ) : patientRecords.length === 0 ? (
                       <p className="empty-msg">No records found for this patient.</p>
                     ) : (
@@ -181,8 +257,8 @@ const DoctorDashboard = () => {
                 )}
                 {accessRequests.map((req, i) => (
                   <tr key={req._id || i}>
-                    <td>{req.patient?.name || req.patientId || '—'}</td>
-                    <td>{new Date(req.createdAt).toLocaleString()}</td>
+                    <td>{req.patientId?.name || req.patientId || '—'}</td>
+                    <td>{formatDateTime(req.requestedAt || req.createdAt)}</td>
                     <td><span className={statusBadgeClass(req.status)}>{req.status}</span></td>
                   </tr>
                 ))}

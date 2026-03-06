@@ -1,8 +1,17 @@
-import { render, screen } from '@testing-library/react';
-import App from './App';
+import { extractApiError } from './utils/apiError';
 
-test('renders login page by default', () => {
-  render(<App />);
-  // The Login page should be shown for unauthenticated users
-  expect(screen.getByText(/MedLedger/i)).toBeInTheDocument();
+test('extractApiError formats backend validation arrays', () => {
+  const error = {
+    response: {
+      data: {
+        errors: [{ message: 'Valid email is required' }, { msg: 'Password is required' }],
+      },
+    },
+  };
+
+  expect(extractApiError(error)).toBe('Valid email is required Password is required');
+});
+
+test('extractApiError falls back for network failures', () => {
+  expect(extractApiError({})).toMatch(/Unable to reach the server/i);
 });

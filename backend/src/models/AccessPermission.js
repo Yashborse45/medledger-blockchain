@@ -27,4 +27,7 @@ const AccessPermissionSchema = new mongoose.Schema({
   },
 });
 
+// Guarantees one access permission thread per doctor-patient pair.
+AccessPermissionSchema.index({ doctorId: 1, patientId: 1 }, { unique: true });
+
 module.exports = mongoose.model('AccessPermission', AccessPermissionSchema);

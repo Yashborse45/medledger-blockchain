@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { registerUser } from '../services/api';
+import { extractApiError } from '../utils/apiError';
 
 /**
  * Register page for new patient self-registration.
@@ -20,11 +21,16 @@ const Register = () => {
     setSuccess('');
     setLoading(true);
     try {
-      await registerUser(form);
+      const payload = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      };
+      await registerUser(payload);
       setSuccess('Registration submitted. Awaiting admin approval.');
       setForm({ name: '', email: '', password: '' });
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(extractApiError(err, 'Registration failed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -50,6 +56,8 @@ const Register = () => {
               value={form.name}
               onChange={handleChange}
               required
+              maxLength={80}
+              autoComplete="name"
               className="form-input"
             />
           </div>
@@ -64,6 +72,7 @@ const Register = () => {
               value={form.email}
               onChange={handleChange}
               required
+              autoComplete="email"
               className="form-input"
             />
           </div>
@@ -78,7 +87,8 @@ const Register = () => {
               value={form.password}
               onChange={handleChange}
               required
-              minLength={6}
+              minLength={8}
+              autoComplete="new-password"
               className="form-input"
             />
           </div>

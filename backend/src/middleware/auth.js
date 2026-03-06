@@ -8,6 +8,11 @@ const User = require('../models/User');
  */
 const verifyToken = async (req, res, next) => {
   try {
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not configured');
+      return res.status(500).json({ message: 'Authentication is not configured correctly' });
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'No token provided' });
@@ -28,7 +33,10 @@ const verifyToken = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    return res.status(401).json({ message: 'Invalid token' });
   }
 };
 

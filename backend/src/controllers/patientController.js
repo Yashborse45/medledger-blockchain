@@ -12,7 +12,8 @@ const getMyRecords = async (req, res) => {
     const records = await PatientRecord.find({ patientId: req.user._id }).sort({ createdAt: -1 });
     return res.status(200).json({ records });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch patient records:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -21,7 +22,10 @@ const getMyRecords = async (req, res) => {
  * Patient creates a new medical record.
  */
 const createRecord = async (req, res) => {
-  const { title, description, diagnosis, prescription } = req.body;
+  const title = req.body.title?.trim();
+  const description = req.body.description?.trim();
+  const diagnosis = req.body.diagnosis?.trim();
+  const prescription = req.body.prescription?.trim();
 
   try {
     const record = await PatientRecord.create({
@@ -42,7 +46,8 @@ const createRecord = async (req, res) => {
 
     return res.status(201).json({ message: 'Record created', record });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to create record:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -58,7 +63,8 @@ const getAccessRequests = async (req, res) => {
 
     return res.status(200).json({ requests });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch incoming requests:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -76,6 +82,12 @@ const grantAccess = async (req, res) => {
     if (!permission) {
       return res.status(404).json({ message: 'Access request not found' });
     }
+    if (permission.status === 'granted') {
+      return res.status(409).json({ message: 'Access is already granted' });
+    }
+    if (permission.status === 'revoked') {
+      return res.status(409).json({ message: 'Cannot grant a revoked request. Ask doctor to re-request.' });
+    }
 
     permission.status = 'granted';
     permission.respondedAt = new Date();
@@ -91,7 +103,8 @@ const grantAccess = async (req, res) => {
 
     return res.status(200).json({ message: 'Access granted', permission });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to grant access:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -109,6 +122,9 @@ const revokeAccess = async (req, res) => {
     if (!permission) {
       return res.status(404).json({ message: 'Access request not found' });
     }
+    if (permission.status === 'revoked') {
+      return res.status(409).json({ message: 'Access is already revoked' });
+    }
 
     permission.status = 'revoked';
     permission.respondedAt = new Date();
@@ -124,7 +140,8 @@ const revokeAccess = async (req, res) => {
 
     return res.status(200).json({ message: 'Access revoked', permission });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to revoke access:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 

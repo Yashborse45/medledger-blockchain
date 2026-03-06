@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { loginUser } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { extractApiError } from '../utils/apiError';
 
 /**
  * Login page with email/password form.
@@ -23,12 +24,18 @@ const Login = () => {
     try {
       const res = await loginUser(form);
       const { user, token } = res.data;
+
+      if ((user.role === 'patient' || user.role === 'doctor') && !user.isApproved) {
+        setError('Your account is pending admin approval.');
+        return;
+      }
+
       login(user, token);
       // Route based on user role
       const routes = { admin: '/admin', doctor: '/doctor', patient: '/patient' };
       navigate(routes[user.role] || '/login');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      setError(extractApiError(err, 'Login failed. Please check your credentials.'));
     } finally {
       setLoading(false);
     }
@@ -53,6 +60,7 @@ const Login = () => {
               value={form.email}
               onChange={handleChange}
               required
+              autoComplete="username"
               className="form-input"
             />
           </div>
@@ -67,6 +75,8 @@ const Login = () => {
               value={form.password}
               onChange={handleChange}
               required
+              minLength={8}
+              autoComplete="current-password"
               className="form-input"
             />
           </div>

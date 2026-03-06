@@ -7,6 +7,7 @@ import {
   grantAccess,
   revokeAccess,
 } from '../services/api';
+import { extractApiError } from '../utils/apiError';
 
 /**
  * PatientDashboard shows:
@@ -36,7 +37,7 @@ const PatientDashboard = () => {
       setRecords(rRes.data.records || rRes.data);
       setAccessRequests(aRes.data.requests || aRes.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load data.');
+      setError(extractApiError(err, 'Failed to load data.'));
     } finally {
       setLoading(false);
     }
@@ -57,13 +58,19 @@ const PatientDashboard = () => {
     setRecordError('');
     setRecordLoading(true);
     try {
-      await createRecord(recordForm);
+      const payload = {
+        title: recordForm.title.trim(),
+        diagnosis: recordForm.diagnosis.trim(),
+        prescription: recordForm.prescription.trim(),
+        description: recordForm.description.trim(),
+      };
+      await createRecord(payload);
       flash('Record added successfully.');
       setShowRecordForm(false);
       setRecordForm({ title: '', description: '', diagnosis: '', prescription: '' });
       fetchData();
     } catch (err) {
-      setRecordError(err.response?.data?.message || 'Failed to create record.');
+      setRecordError(extractApiError(err, 'Failed to create record.'));
     } finally {
       setRecordLoading(false);
     }
@@ -75,7 +82,7 @@ const PatientDashboard = () => {
       flash('Access granted.');
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to grant access.');
+      setError(extractApiError(err, 'Failed to grant access.'));
     }
   };
 
@@ -85,7 +92,7 @@ const PatientDashboard = () => {
       flash('Access revoked.');
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to revoke access.');
+      setError(extractApiError(err, 'Failed to revoke access.'));
     }
   };
 
@@ -93,6 +100,12 @@ const PatientDashboard = () => {
     if (status === 'granted') return 'badge badge-success';
     if (status === 'revoked') return 'badge badge-danger';
     return 'badge badge-warning';
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
   };
 
   return (
@@ -211,17 +224,25 @@ const PatientDashboard = () => {
                 )}
                 {accessRequests.map((req, i) => (
                   <tr key={req._id || i}>
-                    <td>{req.doctor?.name || req.doctorId || '—'}</td>
-                    <td>{new Date(req.createdAt).toLocaleString()}</td>
+                    <td>{req.doctorId?.name || req.doctorId || '—'}</td>
+                    <td>{formatDateTime(req.requestedAt || req.createdAt)}</td>
                     <td><span className={statusBadgeClass(req.status)}>{req.status}</span></td>
                     <td className="action-cell">
                       {req.status === 'pending' && (
-                        <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => handleGrant(req._id || req.id)}
-                        >
-                          Grant
-                        </button>
+                        <>
+                          <button
+                            className="btn btn-success btn-sm"
+                            onClick={() => handleGrant(req._id || req.id)}
+                          >
+                            Grant
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleRevoke(req._id || req.id)}
+                          >
+                            Reject
+                          </button>
+                        </>
                       )}
                       {req.status === 'granted' && (
                         <button

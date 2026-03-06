@@ -7,6 +7,7 @@ import {
   deactivateUser,
   getAuditLogs,
 } from '../services/api';
+import { extractApiError } from '../utils/apiError';
 
 /**
  * AdminDashboard provides user management and audit log views.
@@ -35,7 +36,7 @@ const AdminDashboard = () => {
       const res = await getUsers();
       setUsers(res.data.users || res.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load users.');
+      setError(extractApiError(err, 'Failed to load users.'));
     } finally {
       setLoading(false);
     }
@@ -48,7 +49,7 @@ const AdminDashboard = () => {
       const res = await getAuditLogs();
       setAuditLogs(res.data.logs || res.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load audit logs.');
+      setError(extractApiError(err, 'Failed to load audit logs.'));
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ const AdminDashboard = () => {
       flash('Patient approved successfully.');
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Approval failed.');
+      setError(extractApiError(err, 'Approval failed.'));
     }
   };
 
@@ -82,7 +83,7 @@ const AdminDashboard = () => {
       flash('User deactivated.');
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Deactivation failed.');
+      setError(extractApiError(err, 'Deactivation failed.'));
     }
   };
 
@@ -94,13 +95,19 @@ const AdminDashboard = () => {
     setDoctorError('');
     setDoctorLoading(true);
     try {
-      await createDoctor(doctorForm);
+      const payload = {
+        name: doctorForm.name.trim(),
+        email: doctorForm.email.trim(),
+        password: doctorForm.password,
+        specialization: doctorForm.specialization.trim(),
+      };
+      await createDoctor(payload);
       flash('Doctor account created.');
       setShowDoctorForm(false);
       setDoctorForm({ name: '', email: '', password: '', specialization: '' });
       fetchUsers();
     } catch (err) {
-      setDoctorError(err.response?.data?.message || 'Failed to create doctor.');
+      setDoctorError(extractApiError(err, 'Failed to create doctor.'));
     } finally {
       setDoctorLoading(false);
     }
@@ -182,7 +189,8 @@ const AdminDashboard = () => {
                       value={doctorForm.password}
                       onChange={handleDoctorChange}
                       required
-                      minLength={6}
+                      minLength={8}
+                      autoComplete="new-password"
                     />
                   </div>
                   <div className="form-group">

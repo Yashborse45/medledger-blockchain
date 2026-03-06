@@ -11,7 +11,8 @@ const getAllUsers = async (req, res) => {
     const users = await User.find().select('-password').sort({ createdAt: -1 });
     return res.status(200).json({ users });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch users:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -20,7 +21,10 @@ const getAllUsers = async (req, res) => {
  * Admin creates a doctor account. isApproved defaults to true.
  */
 const createDoctor = async (req, res) => {
-  const { name, email, password, specialization } = req.body;
+  const name = req.body.name?.trim();
+  const email = req.body.email?.trim().toLowerCase();
+  const { password } = req.body;
+  const specialization = req.body.specialization?.trim() || undefined;
 
   try {
     const existingUser = await User.findOne({ email });
@@ -37,6 +41,13 @@ const createDoctor = async (req, res) => {
       specialization,
     });
 
+    await AuditLog.create({
+      action: 'DOCTOR_CREATED',
+      performedBy: req.user._id,
+      targetUser: doctor._id,
+      details: { email: doctor.email, specialization: doctor.specialization || null },
+    });
+
     return res.status(201).json({
       message: 'Doctor account created',
       doctor: {
@@ -47,7 +58,11 @@ const createDoctor = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
+    console.error('Failed to create doctor:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -57,19 +72,37 @@ const createDoctor = async (req, res) => {
  */
 const approveUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { isApproved: true },
-      { new: true }
-    ).select('-password');
-
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    if (user.role !== 'patient') {
+      return res.status(400).json({ message: 'Only patient accounts can be approved' });
+    }
+    if (user.isApproved) {
+      return res.status(200).json({
+        message: 'User is already approved',
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, isApproved: true },
+      });
+    }
 
-    return res.status(200).json({ message: 'User approved', user });
+    user.isApproved = true;
+    await user.save();
+
+    await AuditLog.create({
+      action: 'USER_APPROVED',
+      performedBy: req.user._id,
+      targetUser: user._id,
+      details: { role: user.role },
+    });
+
+    return res.status(200).json({
+      message: 'User approved',
+      user: { id: user._id, name: user.name, email: user.email, role: user.role, isApproved: true },
+    });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to approve user:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -79,19 +112,52 @@ const approveUser = async (req, res) => {
  */
 const deactivateUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { isActive: false },
-      { new: true }
-    ).select('-password');
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ message: 'You cannot deactivate your own account' });
+    }
 
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    if (!user.isActive) {
+      return res.status(200).json({
+        message: 'User is already deactivated',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isApproved: user.isApproved,
+          isActive: false,
+        },
+      });
+    }
 
-    return res.status(200).json({ message: 'User deactivated', user });
+    user.isActive = false;
+    await user.save();
+
+    await AuditLog.create({
+      action: 'USER_DEACTIVATED',
+      performedBy: req.user._id,
+      targetUser: user._id,
+      details: { role: user.role },
+    });
+
+    return res.status(200).json({
+      message: 'User deactivated',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isApproved: user.isApproved,
+        isActive: false,
+      },
+    });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to deactivate user:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -101,14 +167,19 @@ const deactivateUser = async (req, res) => {
  */
 const getAuditLogs = async (req, res) => {
   try {
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 200;
+
     const logs = await AuditLog.find()
       .populate('performedBy', 'name email role')
       .populate('targetUser', 'name email role')
-      .sort({ timestamp: -1 });
+      .sort({ timestamp: -1 })
+      .limit(limit);
 
     return res.status(200).json({ logs });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Failed to fetch audit logs:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
