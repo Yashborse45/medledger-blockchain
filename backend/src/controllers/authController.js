@@ -1,7 +1,7 @@
 // Auth controller — handles registration and login
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const AuditLog = require('../models/AuditLog');
+const { createAuditLog } = require('../services/auditLog');
 
 /**
  * POST /api/auth/register
@@ -70,7 +70,7 @@ const login = async (req, res) => {
     );
 
     // Audit: log successful login
-    await AuditLog.create({
+    await createAuditLog({
       action: 'LOGIN',
       performedBy: user._id,
       details: { email: user.email, role: user.role },

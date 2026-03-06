@@ -1,7 +1,7 @@
 // Doctor controller — access requests and viewing patient records
 const AccessPermission = require('../models/AccessPermission');
 const PatientRecord = require('../models/PatientRecord');
-const AuditLog = require('../models/AuditLog');
+const { createAuditLog } = require('../services/auditLog');
 const User = require('../models/User');
 
 /**
@@ -95,7 +95,7 @@ const requestAccess = async (req, res) => {
       existing.respondedAt = undefined;
       await existing.save();
 
-      await AuditLog.create({
+      await createAuditLog({
         action: 'ACCESS_REQUESTED',
         performedBy: req.user._id,
         targetUser: patientId,
@@ -111,7 +111,7 @@ const requestAccess = async (req, res) => {
     });
 
     // Audit: log access request
-    await AuditLog.create({
+    await createAuditLog({
       action: 'ACCESS_REQUESTED',
       performedBy: req.user._id,
       targetUser: patientId,
@@ -167,7 +167,7 @@ const getPatientRecords = async (req, res) => {
     const records = await PatientRecord.find({ patientId }).sort({ createdAt: -1 });
 
     // Audit: log that doctor viewed records
-    await AuditLog.create({
+    await createAuditLog({
       action: 'RECORD_VIEWED',
       performedBy: req.user._id,
       targetUser: patientId,

@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import {
-  getUsers,
-  createDoctor,
   approvePatient,
+  createDoctor,
   deactivateUser,
   getAuditLogs,
+  getUsers,
+  verifyAuditLog,
 } from '../services/api';
 import { extractApiError } from '../utils/apiError';
 
@@ -20,6 +21,9 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [actionMsg, setActionMsg] = useState('');
+
+  // Blockchain verification state: { [logId]: { loading, result } }
+  const [verifyState, setVerifyState] = useState({});
 
   // Create-doctor form state
   const [showDoctorForm, setShowDoctorForm] = useState(false);
@@ -89,6 +93,19 @@ const AdminDashboard = () => {
 
   const handleDoctorChange = (e) =>
     setDoctorForm({ ...doctorForm, [e.target.name]: e.target.value });
+
+  const handleVerify = async (logId) => {
+    setVerifyState((prev) => ({ ...prev, [logId]: { loading: true, result: null } }));
+    try {
+      const res = await verifyAuditLog(logId);
+      setVerifyState((prev) => ({ ...prev, [logId]: { loading: false, result: res.data } }));
+    } catch (err) {
+      setVerifyState((prev) => ({
+        ...prev,
+        [logId]: { loading: false, result: { verified: false, reason: 'Verification request failed' } },
+      }));
+    }
+  };
 
   const handleCreateDoctor = async (e) => {
     e.preventDefault();
@@ -283,21 +300,68 @@ const AdminDashboard = () => {
                       <th>Action</th>
                       <th>Performed By</th>
                       <th>Timestamp</th>
+                      <th>Blockchain TX</th>
+                      <th>Verification</th>
                     </tr>
                   </thead>
                   <tbody>
                     {auditLogs.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="text-center">No audit logs found.</td>
+                        <td colSpan={5} className="text-center">No audit logs found.</td>
                       </tr>
                     )}
-                    {auditLogs.map((log, i) => (
-                      <tr key={log._id || i}>
-                        <td>{log.action}</td>
-                        <td>{log.performedBy?.name || log.performedBy || '—'}</td>
-                        <td>{new Date(log.timestamp || log.createdAt).toLocaleString()}</td>
-                      </tr>
-                    ))}
+                    {auditLogs.map((log, i) => {
+                      const logId = log._id || i;
+                      const vs = verifyState[logId];
+                      return (
+                        <tr key={logId}>
+                          <td><span className="badge">{log.action}</span></td>
+                          <td>{log.performedBy?.name || log.performedBy || '—'}</td>
+                          <td>{new Date(log.timestamp || log.createdAt).toLocaleString()}</td>
+                          <td>
+                            {log.blockchainTxHash ? (
+                              <span className="tx-hash" title={log.blockchainTxHash}>
+                                {log.blockchainTxHash.slice(0, 10)}…{log.blockchainTxHash.slice(-6)}
+                              </span>
+                            ) : (
+                              <span className="tx-none">Not on blockchain</span>
+                            )}
+                          </td>
+                          <td>
+                            {log.blockchainTxHash ? (
+                              <div className="verify-cell">
+                                <button
+                                  className="btn btn-sm btn-verify"
+                                  disabled={vs?.loading}
+                                  onClick={() => handleVerify(logId)}
+                                >
+                                  {vs?.loading ? 'Checking…' : 'Verify'}
+                                </button>
+                                {vs && !vs.loading && vs.result && (
+                                  vs.result.verified ? (
+                                    <div className="verify-ok">
+                                      ✔ Verified
+                                      <span className="verify-meta">
+                                        Block #{vs.result.blockNumber}
+                                        {vs.result.timestamp && (
+                                          <> · {new Date(vs.result.timestamp).toLocaleString()}</>
+                                        )}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="verify-fail">
+                                      ⚠ {vs.result.reason || 'Could not verify'}
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            ) : (
+                              <span className="tx-none">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

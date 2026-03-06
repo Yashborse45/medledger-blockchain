@@ -1,7 +1,7 @@
 // Patient controller — own record management and access permission responses
 const PatientRecord = require('../models/PatientRecord');
 const AccessPermission = require('../models/AccessPermission');
-const AuditLog = require('../models/AuditLog');
+const { createAuditLog } = require('../services/auditLog');
 
 /**
  * GET /api/patient/records
@@ -37,7 +37,7 @@ const createRecord = async (req, res) => {
     });
 
     // Audit: log record creation
-    await AuditLog.create({
+    await createAuditLog({
       action: 'RECORD_CREATED',
       performedBy: req.user._id,
       targetUser: req.user._id,
@@ -94,7 +94,7 @@ const grantAccess = async (req, res) => {
     await permission.save();
 
     // Audit: log access grant
-    await AuditLog.create({
+    await createAuditLog({
       action: 'ACCESS_GRANTED',
       performedBy: req.user._id,
       targetUser: permission.doctorId,
@@ -131,7 +131,7 @@ const revokeAccess = async (req, res) => {
     await permission.save();
 
     // Audit: log access revocation
-    await AuditLog.create({
+    await createAuditLog({
       action: 'ACCESS_REVOKED',
       performedBy: req.user._id,
       targetUser: permission.doctorId,

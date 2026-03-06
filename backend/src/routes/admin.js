@@ -9,6 +9,7 @@ const {
   approveUser,
   deactivateUser,
   getAuditLogs,
+  verifyAuditLog,
 } = require('../controllers/adminController');
 
 const router = express.Router();
@@ -46,5 +47,10 @@ router.patch(
   deactivateUser
 );
 router.get('/audit-logs', getAuditLogs);
+router.get(
+  '/audit-logs/:id/verify',
+  [validateObjectIdParam('id', 'audit log id'), handleValidationErrors],
+  verifyAuditLog
+);
 
 module.exports = router;

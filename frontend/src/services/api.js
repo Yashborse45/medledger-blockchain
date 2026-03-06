@@ -67,6 +67,7 @@ export const createDoctor = (data) => api.post('/api/admin/doctors', data);
 export const approvePatient = (id) => api.patch(`/api/admin/users/${id}/approve`);
 export const deactivateUser = (id) => api.patch(`/api/admin/users/${id}/deactivate`);
 export const getAuditLogs = () => api.get('/api/admin/audit-logs');
+export const verifyAuditLog = (id) => api.get(`/api/admin/audit-logs/${id}/verify`);
 
 // --- Doctor ---
 export const searchPatients = (q) => api.get('/api/doctor/patients/search', { params: { q } });

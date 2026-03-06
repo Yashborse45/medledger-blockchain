@@ -561,3 +561,70 @@ textarea.form-input {
     padding: 9px 10px;
   }
 }
+
+/* ── Blockchain / Audit Log UI ── */
+.tx-hash {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.8rem;
+  background: #e8f0fe;
+  color: #1565c0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.tx-none {
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+.btn-verify {
+  background-color: #7b1fa2;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.btn-verify:hover:not(:disabled) {
+  background-color: #6a1b9a;
+}
+
+.btn-verify:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.verify-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+}
+
+.verify-ok {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #2e7d32;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.verify-meta {
+  color: #555;
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+
+.verify-fail {
+  color: #c62828;
+  font-size: 0.82rem;
+  font-weight: 600;
+}

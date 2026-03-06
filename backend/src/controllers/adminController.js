@@ -1,6 +1,8 @@
 // Admin controller — user management and audit log access
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const { createAuditLog } = require('../services/auditLog');
+const { verifyTransaction } = require('../services/blockchain');
 
 /**
  * GET /api/admin/users
@@ -41,7 +43,7 @@ const createDoctor = async (req, res) => {
       specialization,
     });
 
-    await AuditLog.create({
+    await createAuditLog({
       action: 'DOCTOR_CREATED',
       performedBy: req.user._id,
       targetUser: doctor._id,
@@ -89,7 +91,7 @@ const approveUser = async (req, res) => {
     user.isApproved = true;
     await user.save();
 
-    await AuditLog.create({
+    await createAuditLog({
       action: 'USER_APPROVED',
       performedBy: req.user._id,
       targetUser: user._id,
@@ -137,7 +139,7 @@ const deactivateUser = async (req, res) => {
     user.isActive = false;
     await user.save();
 
-    await AuditLog.create({
+    await createAuditLog({
       action: 'USER_DEACTIVATED',
       performedBy: req.user._id,
       targetUser: user._id,
@@ -183,4 +185,36 @@ const getAuditLogs = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, createDoctor, approveUser, deactivateUser, getAuditLogs };
+/**
+ * GET /api/admin/audit-logs/:id/verify
+ * Checks whether the audit log's blockchainTxHash exists on-chain.
+ */
+const verifyAuditLog = async (req, res) => {
+  try {
+    const log = await AuditLog.findById(req.params.id);
+    if (!log) {
+      return res.status(404).json({ message: 'Audit log not found' });
+    }
+
+    if (!log.blockchainTxHash) {
+      return res.status(200).json({ verified: false, reason: 'Not recorded on blockchain' });
+    }
+
+    const result = await verifyTransaction(log.blockchainTxHash);
+    if (!result) {
+      return res.status(200).json({ verified: false, reason: 'Transaction not found on blockchain' });
+    }
+
+    return res.status(200).json({
+      verified: true,
+      txHash: result.txHash,
+      blockNumber: result.blockNumber,
+      timestamp: result.timestamp,
+    });
+  } catch (error) {
+    console.error('Failed to verify audit log:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllUsers, createDoctor, approveUser, deactivateUser, getAuditLogs, verifyAuditLog };
