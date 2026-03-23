@@ -35,6 +35,22 @@ const UserSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  ethereumAddress: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    match: [/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum wallet address'],
+    unique: true,
+    sparse: true,
+  },
+  walletLinkNonce: {
+    type: String,
+    default: null,
+  },
+  walletLinkNonceExpiresAt: {
+    type: Date,
+    default: null,
+  },
   isActive: {
     type: Boolean,
     default: true,

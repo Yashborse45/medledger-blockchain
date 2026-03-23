@@ -30,7 +30,55 @@ const searchPatients = async (req, res) => {
       .limit(20)
       .lean();
 
-    return res.status(200).json({ patients });
+    const patientIds = patients.map((item) => item._id);
+    const draftRecords = await PatientRecord.find({
+      patientId: { $in: patientIds },
+    })
+      .select('_id patientId title diagnosis prescription createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const recordsByPatient = new Map();
+    draftRecords.forEach((record) => {
+      const diagnosis = (record.diagnosis || '').trim();
+      const prescription = (record.prescription || '').trim();
+      const isDraft = diagnosis.length === 0 && prescription.length === 0;
+      if (!isDraft) return;
+
+      const key = record.patientId.toString();
+      const existing = recordsByPatient.get(key) || [];
+      if (existing.length < 5) {
+        existing.push({
+          _id: record._id,
+          title: record.title || 'Untitled checkup',
+          createdAt: record.createdAt,
+        });
+      }
+      recordsByPatient.set(key, existing);
+    });
+
+    const permissions = await AccessPermission.find({
+      doctorId: req.user._id,
+      patientId: { $in: patientIds },
+      status: { $in: ['pending', 'granted'] },
+    })
+      .select('patientId status')
+      .lean();
+
+    const permissionByPatient = new Map(
+      permissions.map((item) => [item.patientId.toString(), item.status])
+    );
+
+    const enrichedPatients = patients.map((patient) => {
+      const key = patient._id.toString();
+      return {
+        ...patient,
+        openCheckups: recordsByPatient.get(key) || [],
+        accessStatus: permissionByPatient.get(key) || 'none',
+      };
+    });
+
+    return res.status(200).json({ patients: enrichedPatients });
   } catch (error) {
     console.error('Failed to search patients:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -51,7 +99,41 @@ const getGrantedPatients = async (req, res) => {
     const patients = permissions
       .map((permission) => permission.patientId)
       .filter(Boolean);
-    return res.status(200).json({ patients });
+
+    const patientIds = patients.map((patient) => patient._id);
+    const draftRecords = await PatientRecord.find({
+      patientId: { $in: patientIds },
+    })
+      .select('_id patientId title diagnosis prescription createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const recordsByPatient = new Map();
+    draftRecords.forEach((record) => {
+      const diagnosis = (record.diagnosis || '').trim();
+      const prescription = (record.prescription || '').trim();
+      const isDraft = diagnosis.length === 0 && prescription.length === 0;
+      if (!isDraft) return;
+
+      const key = record.patientId.toString();
+      const existing = recordsByPatient.get(key) || [];
+      if (existing.length < 5) {
+        existing.push({
+          _id: record._id,
+          title: record.title || 'Untitled checkup',
+          createdAt: record.createdAt,
+        });
+      }
+      recordsByPatient.set(key, existing);
+    });
+
+    const enrichedPatients = patients.map((patient) => ({
+      ...patient.toObject(),
+      openCheckups: recordsByPatient.get(patient._id.toString()) || [],
+      accessStatus: 'granted',
+    }));
+
+    return res.status(200).json({ patients: enrichedPatients });
   } catch (error) {
     console.error('Failed to fetch granted patients:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -181,4 +263,66 @@ const getPatientRecords = async (req, res) => {
   }
 };
 
-module.exports = { searchPatients, getGrantedPatients, requestAccess, getMyAccessRequests, getPatientRecords };
+/**
+ * PATCH /api/doctor/patients/:patientId/records/:recordId
+ * Doctor updates diagnosis/prescription for patient checkup records.
+ * Allowed if doctor has pending or granted access request.
+ */
+const updatePatientRecord = async (req, res) => {
+  const { patientId, recordId } = req.params;
+  const diagnosis = req.body.diagnosis?.trim() || '';
+  const prescription = req.body.prescription?.trim() || '';
+  const description = req.body.description?.trim() || '';
+
+  if (!diagnosis && !prescription && !description) {
+    return res.status(400).json({ message: 'At least one field is required to update record' });
+  }
+
+  try {
+    const permission = await AccessPermission.findOne({
+      doctorId: req.user._id,
+      patientId,
+      status: { $in: ['pending', 'granted'] },
+    });
+
+    if (!permission) {
+      return res.status(403).json({
+        message: 'Doctor must have at least a pending access request to update this patient record',
+      });
+    }
+
+    const record = await PatientRecord.findOne({ _id: recordId, patientId });
+    if (!record) {
+      return res.status(404).json({ message: 'Patient record not found' });
+    }
+
+    if (diagnosis) record.diagnosis = diagnosis;
+    if (prescription) record.prescription = prescription;
+    if (description) record.description = description;
+    await record.save();
+
+    await createAuditLog({
+      action: 'RECORD_UPDATED_BY_DOCTOR',
+      performedBy: req.user._id,
+      targetUser: patientId,
+      details: {
+        recordId: record._id,
+        permissionStatus: permission.status,
+      },
+    });
+
+    return res.status(200).json({ message: 'Record updated by doctor', record });
+  } catch (error) {
+    console.error('Failed to update patient record by doctor:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+module.exports = {
+  searchPatients,
+  getGrantedPatients,
+  requestAccess,
+  getMyAccessRequests,
+  getPatientRecords,
+  updatePatientRecord,
+};

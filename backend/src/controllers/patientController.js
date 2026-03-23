@@ -1,6 +1,7 @@
 // Patient controller — own record management and access permission responses
 const PatientRecord = require('../models/PatientRecord');
 const AccessPermission = require('../models/AccessPermission');
+const User = require('../models/User');
 const { createAuditLog } = require('../services/auditLog');
 
 /**
@@ -58,7 +59,7 @@ const createRecord = async (req, res) => {
 const getAccessRequests = async (req, res) => {
   try {
     const requests = await AccessPermission.find({ patientId: req.user._id })
-      .populate('doctorId', 'name email specialization')
+      .populate('doctorId', 'name email specialization ethereumAddress')
       .sort({ requestedAt: -1 });
 
     return res.status(200).json({ requests });
@@ -73,6 +74,8 @@ const getAccessRequests = async (req, res) => {
  * Patient grants an access request from a doctor.
  */
 const grantAccess = async (req, res) => {
+  const paymentTxHash = req.body.paymentTxHash?.trim();
+
   try {
     const permission = await AccessPermission.findOne({
       _id: req.params.requestId,
@@ -89,16 +92,30 @@ const grantAccess = async (req, res) => {
       return res.status(409).json({ message: 'Cannot grant a revoked request. Ask doctor to re-request.' });
     }
 
+    const doctor = await User.findOne({ _id: permission.doctorId, role: 'doctor' }).select(
+      'ethereumAddress'
+    );
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor account not found for this request' });
+    }
+    if (!doctor.ethereumAddress) {
+      return res.status(400).json({ message: 'Doctor wallet address is not configured' });
+    }
+
     permission.status = 'granted';
     permission.respondedAt = new Date();
+    permission.paymentTxHash = paymentTxHash;
     await permission.save();
 
-    // Audit: log access grant
+    // Audit: log access grant that includes payment transaction hash
     await createAuditLog({
-      action: 'ACCESS_GRANTED',
+      action: 'ACCESS_GRANTED_WITH_PAYMENT',
       performedBy: req.user._id,
       targetUser: permission.doctorId,
-      details: { permissionId: permission._id },
+      details: {
+        permissionId: permission._id,
+        paymentTxHash,
+      },
     });
 
     return res.status(200).json({ message: 'Access granted', permission });

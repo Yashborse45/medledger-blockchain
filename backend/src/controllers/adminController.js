@@ -47,7 +47,10 @@ const createDoctor = async (req, res) => {
       action: 'DOCTOR_CREATED',
       performedBy: req.user._id,
       targetUser: doctor._id,
-      details: { email: doctor.email, specialization: doctor.specialization || null },
+      details: {
+        email: doctor.email,
+        specialization: doctor.specialization || null,
+      },
     });
 
     return res.status(201).json({

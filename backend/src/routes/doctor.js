@@ -1,5 +1,6 @@
 // Doctor routes — protected, require doctor role and approval
 const express = require('express');
+const { body } = require('express-validator');
 const { verifyToken, requireRole, requireApproved } = require('../middleware/auth');
 const { handleValidationErrors, validateObjectIdParam } = require('../middleware/validation');
 const {
@@ -8,6 +9,7 @@ const {
   requestAccess,
   getMyAccessRequests,
   getPatientRecords,
+  updatePatientRecord,
 } = require('../controllers/doctorController');
 
 const router = express.Router();
@@ -28,6 +30,30 @@ router.get(
   '/patients/:patientId/records',
   [validateObjectIdParam('patientId', 'patient id'), handleValidationErrors],
   getPatientRecords
+);
+router.patch(
+  '/patients/:patientId/records/:recordId',
+  [
+    validateObjectIdParam('patientId', 'patient id'),
+    validateObjectIdParam('recordId', 'record id'),
+    body('diagnosis')
+      .optional()
+      .trim()
+      .isLength({ max: 500 })
+      .withMessage('Diagnosis must be at most 500 characters'),
+    body('prescription')
+      .optional()
+      .trim()
+      .isLength({ max: 500 })
+      .withMessage('Prescription must be at most 500 characters'),
+    body('description')
+      .optional()
+      .trim()
+      .isLength({ max: 2000 })
+      .withMessage('Description must be at most 2000 characters'),
+    handleValidationErrors,
+  ],
+  updatePatientRecord
 );
 
 module.exports = router;

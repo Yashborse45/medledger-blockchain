@@ -12,6 +12,21 @@
  *    • Fallback to caller-supplied fallbackMessage
  */
 export const extractApiError = (error, fallbackMessage = 'Something went wrong. Please try again.') => {
+  const isAxiosLike = Boolean(error?.isAxiosError || error?.config || error?.response);
+
+  if (!isAxiosLike) {
+    if (typeof error?.shortMessage === 'string' && error.shortMessage.trim()) {
+      return error.shortMessage;
+    }
+    if (typeof error?.reason === 'string' && error.reason.trim()) {
+      return error.reason;
+    }
+    if (typeof error?.message === 'string' && error.message.trim()) {
+      return error.message;
+    }
+    return fallbackMessage;
+  }
+
   // ── No response received ─────────────────────────────────────────────────
   if (!error?.response) {
     if (error?.code === 'ECONNABORTED') {

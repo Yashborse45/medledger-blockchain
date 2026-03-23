@@ -1,7 +1,15 @@
 // Auth controller — handles registration and login
+const crypto = require('crypto');
+const { ethers } = require('ethers');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { createAuditLog } = require('../services/auditLog');
+
+const WALLET_NONCE_TTL_MS = 10 * 60 * 1000;
+
+const walletLinkMessage = ({ nonce, userId, address }) => (
+  `MedLedger wallet link request\nNonce: ${nonce}\nUser: ${userId}\nWallet: ${address}`
+);
 
 /**
  * POST /api/auth/register
@@ -84,6 +92,7 @@ const login = async (req, res) => {
         email: user.email,
         role: user.role,
         isApproved: user.isApproved,
+        ethereumAddress: user.ethereumAddress || null,
       },
     });
   } catch (error) {
@@ -92,4 +101,99 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { register, login };
+/**
+ * POST /api/auth/wallet/nonce
+ * Creates a short-lived nonce that the authenticated patient/doctor signs via MetaMask.
+ */
+const createWalletLinkNonce = async (req, res) => {
+  const address = req.body.address?.trim().toLowerCase();
+
+  try {
+    const nonce = crypto.randomBytes(16).toString('hex');
+
+    req.user.walletLinkNonce = nonce;
+    req.user.walletLinkNonceExpiresAt = new Date(Date.now() + WALLET_NONCE_TTL_MS);
+    await req.user.save();
+
+    return res.status(200).json({
+      nonce,
+      message: walletLinkMessage({ nonce, userId: req.user._id.toString(), address }),
+      expiresAt: req.user.walletLinkNonceExpiresAt,
+    });
+  } catch (error) {
+    console.error('Failed to create wallet link nonce:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/auth/wallet/verify
+ * Verifies the signed nonce and links wallet to authenticated patient/doctor account.
+ */
+const verifyAndLinkWallet = async (req, res) => {
+  const address = req.body.address?.trim().toLowerCase();
+  const signature = req.body.signature?.trim();
+
+  try {
+    const freshUser = await User.findById(req.user._id);
+    if (!freshUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (!freshUser.walletLinkNonce || !freshUser.walletLinkNonceExpiresAt) {
+      return res.status(400).json({ message: 'No active wallet link request found' });
+    }
+    if (freshUser.walletLinkNonceExpiresAt.getTime() < Date.now()) {
+      freshUser.walletLinkNonce = null;
+      freshUser.walletLinkNonceExpiresAt = null;
+      await freshUser.save();
+      return res.status(400).json({ message: 'Wallet link request expired. Please retry.' });
+    }
+
+    const message = walletLinkMessage({
+      nonce: freshUser.walletLinkNonce,
+      userId: freshUser._id.toString(),
+      address,
+    });
+
+    const recovered = ethers.verifyMessage(message, signature).toLowerCase();
+    if (recovered !== address) {
+      return res.status(401).json({ message: 'Signature verification failed' });
+    }
+
+    const existingWalletOwner = await User.findOne({
+      _id: { $ne: freshUser._id },
+      ethereumAddress: address,
+    });
+    if (existingWalletOwner) {
+      return res.status(409).json({ message: 'Wallet address is already linked to another account' });
+    }
+
+    freshUser.ethereumAddress = address;
+    freshUser.walletLinkNonce = null;
+    freshUser.walletLinkNonceExpiresAt = null;
+    await freshUser.save();
+
+    await createAuditLog({
+      action: 'WALLET_LINKED',
+      performedBy: freshUser._id,
+      details: { ethereumAddress: address },
+    });
+
+    return res.status(200).json({
+      message: 'Wallet linked successfully',
+      user: {
+        id: freshUser._id,
+        name: freshUser.name,
+        email: freshUser.email,
+        role: freshUser.role,
+        isApproved: freshUser.isApproved,
+        ethereumAddress: freshUser.ethereumAddress,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to verify wallet signature:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+module.exports = { register, login, createWalletLinkNonce, verifyAndLinkWallet };

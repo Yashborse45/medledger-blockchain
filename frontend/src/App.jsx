@@ -1,12 +1,12 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute';
-import Login from './pages/Login';
-import Register from './pages/Register';
+import { AuthProvider } from './context/AuthContext';
 import AdminDashboard from './pages/AdminDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
+import Login from './pages/Login';
 import PatientDashboard from './pages/PatientDashboard';
+import Register from './pages/Register';
+import UserProfile from './pages/UserProfile';
 
 /**
  * App sets up the AuthProvider and all client-side routes.
@@ -43,6 +43,22 @@ function App() {
             element={
               <PrivateRoute role="patient">
                 <PatientDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <PrivateRoute>
+                <UserProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/wallet"
+            element={
+              <PrivateRoute>
+                <UserProfile />
               </PrivateRoute>
             }
           />

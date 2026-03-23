@@ -38,7 +38,7 @@ medledger-blockchain/
 │       ├── routes/             # auth, admin, doctor, patient
 │       └── controllers/        # Business logic for each route group
 └── frontend/
-    ├── .env.example           # REACT_APP_API_URL
+    ├── .env.example           # VITE_API_URL
     ├── package.json
     └── src/
         ├── App.js             # Router + AuthProvider
@@ -76,7 +76,7 @@ npm run dev                 # Starts with nodemon on port 5000
 
 ```bash
 cd frontend
-cp .env.example .env        # Edit REACT_APP_API_URL if needed
+cp .env.example .env        # Edit VITE_API_URL if needed
 npm install
 npm start                   # Starts React dev server on port 3000
 ```
@@ -147,5 +147,5 @@ ADMIN_DEFAULT_PASSWORD=your_admin_password_here
 
 ### Frontend (`.env`)
 ```
-REACT_APP_API_URL=http://localhost:5000
+VITE_API_URL=http://localhost:5000
 ```

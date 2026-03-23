@@ -1,5 +1,11 @@
 // MongoDB connection configuration using Mongoose
 const mongoose = require('mongoose');
+const dns = require('dns');
+
+// Force use of Google DNS to resolve MongoDB Atlas SRV records
+// (router DNS may fail to resolve _mongodb._tcp SRV lookups)
+dns.setDefaultResultOrder('ipv4first');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const connectDB = async () => {
   try {

@@ -1,7 +1,13 @@
 // Auth routes — public registration and login endpoints
 const express = require('express');
 const { body } = require('express-validator');
-const { register, login } = require('../controllers/authController');
+const {
+  register,
+  login,
+  createWalletLinkNonce,
+  verifyAndLinkWallet,
+} = require('../controllers/authController');
+const { verifyToken, requireRole } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validation');
 
 const router = express.Router();
@@ -34,6 +40,35 @@ router.post(
     handleValidationErrors,
   ],
   login
+);
+
+router.post(
+  '/wallet/nonce',
+  [
+    verifyToken,
+    requireRole('doctor', 'patient'),
+    body('address')
+      .trim()
+      .matches(/^0x[a-fA-F0-9]{40}$/)
+      .withMessage('address must be a valid Ethereum address'),
+    handleValidationErrors,
+  ],
+  createWalletLinkNonce
+);
+
+router.post(
+  '/wallet/verify',
+  [
+    verifyToken,
+    requireRole('doctor', 'patient'),
+    body('address')
+      .trim()
+      .matches(/^0x[a-fA-F0-9]{40}$/)
+      .withMessage('address must be a valid Ethereum address'),
+    body('signature').trim().notEmpty().withMessage('signature is required'),
+    handleValidationErrors,
+  ],
+  verifyAndLinkWallet
 );
 
 module.exports = router;

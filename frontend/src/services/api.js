@@ -2,10 +2,10 @@ import axios from 'axios';
 
 // Create a configured axios instance pointing to the backend API
 // baseURL is empty so requests are relative to the dev server, which proxies
-// them to the backend (see "proxy" in package.json). Set REACT_APP_API_URL
+// them to the backend (see Vite proxy in vite.config.js). Set VITE_API_URL
 // to override (e.g. a deployed backend URL).
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || '',
+  baseURL: import.meta.env.VITE_API_URL || import.meta.env.REACT_APP_API_URL || '',
 });
 
 const clearPersistedAuth = () => {
@@ -60,6 +60,9 @@ api.interceptors.response.use(
 // --- Auth ---
 export const loginUser = (data) => api.post('/api/auth/login', data);
 export const registerUser = (data) => api.post('/api/auth/register', data);
+export const requestWalletLinkNonce = (address) => api.post('/api/auth/wallet/nonce', { address });
+export const verifyWalletLink = (address, signature) =>
+  api.post('/api/auth/wallet/verify', { address, signature });
 
 // --- Admin ---
 export const getUsers = () => api.get('/api/admin/users');
@@ -75,12 +78,14 @@ export const getMyPatients = () => api.get('/api/doctor/patients');
 export const requestAccess = (patientId) => api.post(`/api/doctor/access-requests/${patientId}`);
 export const getAccessRequests = () => api.get('/api/doctor/access-requests');
 export const getPatientRecords = (patientId) => api.get(`/api/doctor/patients/${patientId}/records`);
+export const updatePatientRecordByDoctor = (patientId, recordId, data) =>
+  api.patch(`/api/doctor/patients/${patientId}/records/${recordId}`, data);
 
 // --- Patient ---
 export const getMyRecords = () => api.get('/api/patient/records');
 export const createRecord = (data) => api.post('/api/patient/records', data);
 export const getIncomingRequests = () => api.get('/api/patient/access-requests');
-export const grantAccess = (reqId) => api.patch(`/api/patient/access-requests/${reqId}/grant`);
+export const grantAccess = (reqId, data) => api.patch(`/api/patient/access-requests/${reqId}/grant`, data);
 export const revokeAccess = (reqId) => api.patch(`/api/patient/access-requests/${reqId}/revoke`);
 
 export default api;

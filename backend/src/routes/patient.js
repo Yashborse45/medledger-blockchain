@@ -48,7 +48,16 @@ router.post(
 router.get('/access-requests', getAccessRequests);
 router.patch(
   '/access-requests/:requestId/grant',
-  [validateObjectIdParam('requestId', 'request id'), handleValidationErrors],
+  [
+    validateObjectIdParam('requestId', 'request id'),
+    body('paymentTxHash')
+      .trim()
+      .notEmpty()
+      .withMessage('paymentTxHash is required')
+      .matches(/^0x[a-fA-F0-9]{64}$/)
+      .withMessage('paymentTxHash must be a valid Ethereum transaction hash'),
+    handleValidationErrors,
+  ],
   grantAccess
 );
 router.patch(

@@ -25,6 +25,12 @@ const AccessPermissionSchema = new mongoose.Schema({
   respondedAt: {
     type: Date,
   },
+  paymentTxHash: {
+    type: String,
+    trim: true,
+    default: null,
+    match: /^0x[a-fA-F0-9]{64}$/,
+  },
 });
 
 // Guarantees one access permission thread per doctor-patient pair.

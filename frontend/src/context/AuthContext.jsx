@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 // AuthContext provides authentication state across the entire app
 const AuthContext = createContext(null);
@@ -21,6 +21,12 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
+  }, []);
+
+  const updateUser = useCallback((nextUser) => {
+    if (!nextUser) return;
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    setUser(nextUser);
   }, []);
 
   // Rehydrate auth state from localStorage
@@ -69,7 +75,16 @@ export const AuthProvider = ({ children }) => {
   }, [loadStoredAuth]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: Boolean(user && token) }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        updateUser,
+        isAuthenticated: Boolean(user && token),
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
